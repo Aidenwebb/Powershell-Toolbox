@@ -16,16 +16,19 @@ param
     [int]$maxUserLogonTimeStamp = 90 # The number of days a user hasn't checked in with the domain before they are automatically excluded from audit. 
 )
 
+$maxWorkstationTimeStampAsFileTime = (Get-Date).AddDays(-$maxWorkstationLogonTimeStamp).ToFileTime().toString() 
+
+
 $excludeFromReportString = "Exclude from user and workstation audit"
 $clientname = (Get-ADDomain).name
  
 # Get all users in Internal Accounts/Standard OU that are not generic accounts
-$users = Get-ADUser -Filter * -SearchBase $internalAccOUDN -Properties info | where info -NotMatch $excludeFromReportString
+$users = get-aduser -LDAPFilter "(lastLogonTimeStamp>=$90daysAgoString)" -SearchBase $internalAccOUDN -Properties info, LastLogonTimeStamp | where info -NotMatch $excludeFromReportString 
 $usersCount = ($users | Measure-Object).Count
  
  
 # Get all desktops, laptops, then add the number together. We don't bill per Server.
- $computersDesktops = (Get-ADObject -filter {ObjectClass -eq "computer"} -SearchBase $desktopOUDN -Properties description | where description -NotMatch $excludeFromReportString | Measure-Object).count
+$computersDesktops = (Get-ADObject -filter {ObjectClass -eq "computer"} -SearchBase $desktopOUDN -Properties description | where description -NotMatch $excludeFromReportString | Measure-Object).count
 $computerLaptops = (Get-ADObject -filter {ObjectClass -eq "computer"} -SearchBase $laptopOUDN -Properties description | where description -NotMatch $excludeFromReportString | Measure-Object).count 
 
 
