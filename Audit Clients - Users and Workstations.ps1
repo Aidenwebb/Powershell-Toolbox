@@ -7,7 +7,13 @@ param
     [Parameter(Mandatory=$true)]
     [string]$laptopOUDN,
     [Parameter(Mandatory=$true)]
-    [string]$internalAccOUDN
+    [string]$internalAccOUDN, 
+    [Parameter()] 
+    [ValidateRange(14, [int]::MaxValue)] # Minimum 14 as LastLoginTimeStamp AD Attribute only updates if the previous value is more than 14 days in the past 
+    [int]$maxWorkstationLogonTimeStamp = 90, # The number of days a workstation hasn't checked in with the domain before they are automatically excluded from audit. 
+    [Parameter()] 
+    [ValidateRange(14, [int]::MaxValue)] # Minimum 14 as LastLoginTimeStamp AD Attribute only updates if the previous value is more than 14 days in the past 
+    [int]$maxUserLogonTimeStamp = 90 # The number of days a user hasn't checked in with the domain before they are automatically excluded from audit. 
 )
 
 $excludeFromReportString = "Exclude from user and workstation audit"
