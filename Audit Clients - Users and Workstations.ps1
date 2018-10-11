@@ -24,7 +24,7 @@ param
 ### Output script parameters so if there's a problem we can check for obvious mistakes.
 
 Write-Host "---DEBUG---"
-Write-Host "---Version 1.1---"
+Write-Host "---Version 1.5---"
 Write-Host "Desktop OU: $desktopOUDN"
 Write-Host "Laptop OU: $laptopOUDN"
 Write-Host "Internal Accounts OU: $internalAccOUDN"
