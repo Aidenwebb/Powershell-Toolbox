@@ -21,6 +21,16 @@ param
     [int]$maxUserLogonTimeStamp = 90 # The number of days a user hasn't checked in with the domain before they are automatically excluded from audit. 
 )
 
+# Declare arrays we'll be using later
+[array]$billableUsers = @()
+[array]$excludedUsers = @()
+[array]$inactiveUsers = @()
+
+[array]$billableComputers = @()
+[array]$excludedComputers = @()
+[array]$inactiveComputers = @()
+
+
 ### Output script parameters so if there's a problem we can check for obvious mistakes.
 
 Write-Host "---DEBUG---"
@@ -51,9 +61,14 @@ $excludedExternalUsers = get-aduser -Filter * -SearchBase $externalAccOUDN -Prop
 $inactiveExternalUsers = get-aduser -Filter {lastLogonTimeStamp -lt $maxUserTimeStampAsFileTime} -SearchBase $externalAccOUDN -Properties lastLogonTimeStamp
 
 # Combine the lists for counting and reporting
-$billableUsers = $includedInternalUsers + $includedExternalUsers
-$excludedUsers = $excludedInternalUsers + $excludedExternalUsers
-$inactiveUsers = $inactiveInternalUsers + $inactiveExternalUsers
+$billableUsers += $includedInternalUsers 
+$billableUsers += $includedExternalUsers
+
+$excludedUsers += $excludedInternalUsers 
+$excludedUsers += $excludedExternalUsers
+
+$inactiveUsers += $inactiveInternalUsers 
+$inactiveUsers += $inactiveExternalUsers
  
 ### We bill for desktops and laptops, but not for servers.
 
@@ -68,9 +83,14 @@ $excludedLaptops = get-adcomputer -Filter * -SearchBase $laptopOUDN -Properties 
 $inactiveLaptops = get-adcomputer -Filter {lastLogonTimeStamp -lt $maxWorkstationTimeStampAsFileTime} -SearchBase $laptopOUDN -Properties description, lastLogonTimeStamp 
 
 
-$billableComputers = $includedDesktops + $includedLaptops
-$excludedComputers = $excludedDesktops + $excludedLaptops
-$inactiveComputers = $inactiveDesktops + $inactiveLaptops
+$billableComputers += $includedDesktops
+$billableComputers += $includedLaptops
+
+$excludedComputers += $excludedDesktops 
+$excludedComputers += $excludedLaptops
+
+$inactiveComputers += $inactiveDesktops 
+$inactiveComputers += $inactiveLaptops
  
 $totalComputers = $computersDesktops + $computerLaptops
  
