@@ -34,7 +34,7 @@ param
 ### Output script parameters so if there's a problem we can check for obvious mistakes.
 
 Write-Host "---DEBUG---"
-Write-Host "---Version 1.6.1---"
+Write-Host "---Version 1.6.2---"
 Write-Host "Running as: $(whoami)"
 Write-Host "Desktop OU: $desktopOUDN"
 Write-Host "Laptop OU: $laptopOUDN"
@@ -54,12 +54,12 @@ $clientname = (Get-ADDomain).name
 # Get all users in Internal OU's 
 $includedInternalUsers = get-aduser -Filter {lastLogonTimeStamp -ge $maxUserTimeStampAsFileTime} -SearchBase $internalAccOUDN -Properties info, LastLogonTimeStamp | where info -NotMatch $excludeFromReportString
 $excludedInternalUsers = get-aduser -Filter * -SearchBase $internalAccOUDN -Properties info, LastLogonTimeStamp | where info -Match $excludeFromReportString
-$inactiveInternalUsers = get-aduser -Filter {lastLogonTimeStamp -lt $maxUserTimeStampAsFileTime} -SearchBase $internalAccOUDN  -Properties lastLogonTimeStamp
+$inactiveInternalUsers = get-aduser -Filter {(lastLogonTimeStamp -lt $maxUserTimeStampAsFileTime) -or (-not (lastLogonTimeStamp -like "*"))} -SearchBase $internalAccOUDN  -Properties lastLogonTimeStamp
 
 # Get all users in the External OU's
 $includedExternalUsers = get-aduser -Filter {lastLogonTimeStamp -ge $maxUserTimeStampAsFileTime} -SearchBase $externalAccOUDN -Properties info, LastLogonTimeStamp | where info -NotMatch $excludeFromReportString
 $excludedExternalUsers = get-aduser -Filter * -SearchBase $externalAccOUDN -Properties info, LastLogonTimeStamp | where info -Match $excludeFromReportString
-$inactiveExternalUsers = get-aduser -Filter {lastLogonTimeStamp -lt $maxUserTimeStampAsFileTime} -SearchBase $externalAccOUDN -Properties lastLogonTimeStamp
+$inactiveExternalUsers = get-aduser -Filter {(lastLogonTimeStamp -lt $maxUserTimeStampAsFileTime) -or (-not (lastLogonTimeStamp -like "*"))} -SearchBase $externalAccOUDN -Properties lastLogonTimeStamp
 
 # Combine the lists for counting and reporting
 $billableUsers += $includedInternalUsers 
@@ -76,12 +76,12 @@ $inactiveUsers += $inactiveExternalUsers
 # Get all computers in the Desktops OU
 $includedDesktops = get-adcomputer -Filter {lastLogonTimeStamp -ge $maxWorkstationTimeStampAsFileTime} -SearchBase $desktopOUDN -Properties description | where description -NotMatch $excludeFromReportString
 $excludedDesktops = get-adcomputer -Filter * -SearchBase $desktopOUDN -Properties description | where description -Match $excludeFromReportString
-$inactiveDesktops = get-adcomputer -Filter {lastLogonTimeStamp -lt $maxWorkstationTimeStampAsFileTime} -SearchBase $desktopOUDN -Properties description, lastLogonTimeStamp 
+$inactiveDesktops = get-adcomputer -Filter {(lastLogonTimeStamp -lt $maxWorkstationTimeStampAsFileTime) -or (-not (lastLogonTimeStamp -like "*"))} -SearchBase $desktopOUDN -Properties description, lastLogonTimeStamp 
 
 # Get all computers in the Laptops OU
 $includedLaptops = get-adcomputer -Filter {lastLogonTimeStamp -ge $maxWorkstationTimeStampAsFileTime} -SearchBase $laptopOUDN -Properties description | where description -NotMatch $excludeFromReportString
 $excludedLaptops = get-adcomputer -Filter * -SearchBase $laptopOUDN -Properties description | where description -Match $excludeFromReportString
-$inactiveLaptops = get-adcomputer -Filter {lastLogonTimeStamp -lt $maxWorkstationTimeStampAsFileTime} -SearchBase $laptopOUDN -Properties description, lastLogonTimeStamp 
+$inactiveLaptops = get-adcomputer -Filter {(lastLogonTimeStamp -lt $maxWorkstationTimeStampAsFileTime) -or (-not (lastLogonTimeStamp -like "*"))} -SearchBase $laptopOUDN -Properties description, lastLogonTimeStamp 
 
 
 $billableComputers += $includedDesktops
