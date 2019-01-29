@@ -52,7 +52,6 @@ $userTemporaryFiles = @(
 $systemTemporaryFiles = @(
     [pscustomobject]@{Path='\$Recycle.Bin'; Filetype=".*"}
     )
-    
 
 # Check if User Path exists
 If(Test-Path -Path $usersFolder)
