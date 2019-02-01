@@ -36,12 +36,12 @@ param
 Write-Host "---DEBUG---"
 Write-Host "---Version 1.6.2---"
 Write-Host "Running as: $(whoami)"
-Write-Host "Desktop OU: $desktopOUDN"
-Write-Host "Laptop OU: $laptopOUDN"
-Write-Host "Internal Accounts OU: $internalAccOUDN"
-Write-Host "External Accounts OU: $externalAccOUDN"
-Write-Host "Workstations considered inactive after: $maxWorkstationLogonTimeStamp days"
-Write-Host "Users considered inactive after: $maxUserLogonTimeStamp days"
+Write-Host "Args Count: $($args.Count)"
+Write-Host "All passed args:"
+$args
+Write-Host "Parameters Count: $($PsBoundParameters.Count)"
+Write-Host "All passed parameters:"
+$PsBoundParameters
 Write-Host "--------------------------------------"
 Write-Host ""
 
