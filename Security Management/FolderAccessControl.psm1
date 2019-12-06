@@ -382,11 +382,16 @@ Function Add-GroupAccessToFolder{
             Set-ACLsOnFolder -FullFolderPath $FullFolderPath
 
     # Add relevant ACL to the Staff group
+        $ACLName = New-ACLName -FullFolderPath $FullFolderPath -ACLLevel $PermissionLevel
+        $StaffADGroup | Add-ADGroupMember -Members $ACLName
+
 
     # Check each folder upstream of target folder
             # Check if ACL set already exists on folder, particularly Traverse.
                 # If false, create a set
             # Add Traverse ACL to the Staff group
+            $TraverseACLName = New-ACLName -FullFolderPath $SubfolderPath -ACLLevel Traverse
+            $StaffADGroup | Add-ADGroupMember -Members $TraverseACLName
 
     <#
     Example output:
