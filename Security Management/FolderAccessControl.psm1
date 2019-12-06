@@ -1,3 +1,5 @@
+
+
 Function Get-PathDepth {
     Param(
     [ValidateScript({
@@ -18,7 +20,7 @@ Function Get-PathDepth {
     if($ParentPath)
     {
         $DepthCounter++
-        Calculate-PathDepth -Path $ParentPath -DepthCounter $DepthCounter
+        Get-PathDepth -Path $ParentPath -DepthCounter $DepthCounter
     }
     
     else 
@@ -26,6 +28,7 @@ Function Get-PathDepth {
         return $DepthCounter
     }
 }
+
 
 Function Remove-InvalidFileNameChars {
   param(
@@ -39,6 +42,44 @@ Function Remove-InvalidFileNameChars {
   $invalidChars = [IO.Path]::GetInvalidFileNameChars() -join ''
   $re = "[{0}]" -f [RegEx]::Escape($invalidChars)
   return ($Name -replace $re)
+}
+
+Function Get-RootName {
+    Param(
+    [ValidateScript({
+        if( -Not ($_ | Test-Path )){
+            throw "Folder does not exist"
+        }
+        return $true
+        })]
+    [String]
+    $Path
+    )
+    
+    return (Get-item -Path $Path).Root 
+}
+
+Function Clean-FolderPath{
+    Param(
+        [Parameter(Mandatory=$true,
+        Position=0,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $Path
+    )
+#replacing spaces with Blank, replacing \ with underscores, removing :, removing duplicate _'s, remove invalid characters
+
+    # Remove :
+    $CleanedPath = $Path.Replace(":","")
+    # Remove Spaces
+    $CleanedPath = $Path.Replace(" ","")
+    #Replace \ with _
+    $CleanedPath = $CleanedPath.Replace("\","_")
+    # Remove invalid characters
+    $CleanedPath = $CleanedPath | Remove-InvalidFileNameChars
+    #Remove duplicate _'s
+    return $CleanedPath -replace "(?m)_(?=_|$)" 
 }
 
 function New-ACLName{
@@ -71,28 +112,84 @@ function New-ACLName{
         "FullControl" { $ACLLevelSuffix = "FC"}
     }
 
+    $ACLPrefix = "ACL"
+
     $PathDepth = Get-PathDepth -Path $FullFolderPath
     
-    
-    $PathLeaf = Split-Path $FullFolderPath -Leaf
+    If ($FullFolderPath.Length -ge 44){
+        $LongPath = $true
+    }
+    else {
+        $LongPath = $false
+    }
 
-    Switch ($PathDepth)
-    {
-        0 {$ACLName = "ACL_VOLUME_$($PathLeaf)_$($ACLLevelSuffix)"}
-        1 {$ACLName = "ACL_ROOT_$($PathLeaf)_$($ACLLevelSuffix)"}
-        {$_ -ge 2} {
+    $RootName = Get-RootName -Path $FullFolderPath | Clean-FolderPath
+
+    $CleanedPath = Clean-FolderPath $FullFolderPath
+
+    # If the path depth is 0, use ROOT ACL name
+    If ($PathDepth -eq 0){
+        $ACLMiddle = "ROOT_$($RootName)"
+    }
+
+    elseif ($PathDepth -ge 1 ) {
+        
+
+        # If path depth is over 1, and it is a long path
+        # Use root + .. + last 2 folders of path, replacing spaces with Blank, replacing \ with underscores, removing :, removing duplicate _'s, remove invalid characters
+        if ($LongPath) {
+            $CleanedPathSplit = $CleanedPath.Split("_")
+            $ACLMiddle = "LONGPATH_$($RootName)_.._$($CleanedPathSplit[-1])_$($CleanedPathSplit[-2])"
+            if ($ACLMiddle -gt 42){
+                $ACLMiddle = "$($ACLMiddle.Substring(0, 42)).."
+
+            }
+
+
+        }
+
+        else {
+            $ACLMiddle = "$($CleanedPath)"
+        }
+    }   
+
+        # If path depth is over 1, and it is not a long path
+        # Use full file path, replacing spaces with Blank, replacing \ with underscores, removing :, removing duplicate _'s, remove invalid characters
+    else {
+        throw "Something Broke"
+    }
+
+    $ACLName = "$($ACLPrefix)_$($ACLMiddle)_$($ACLLevelSuffix)"
+
+    return $ACLName -replace "(?m)_(?=_|$)"
+}
+    
+    #return $ACLName
+
+    
+
+    #$PathLeaf = Split-Path $FullFolderPath -Leaf
+
+    #Switch ($PathDepth)
+    <#{
+        0 {$ACLName = "ACL_ROOT_$($RootName)_$($ACLLevelSuffix)"}
+        {($_ -ge 1) -and ($LongPath -eq $true) } {
             $ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
-            $ACLName = "ACL_$($ParentLeaf)_$($PathLeaf)_$($ACLLevelSuffix)"
+            $ACLName = "ACL_LONGPATH_$($ParentLeaf)_$($PathLeaf)_$($ACLLevelSuffix)"
+        }
+        {($_ -ge 1) -and ($LongPath -eq $false) } {
+            $ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
+            $ACLName = "ACL__$($ACLLevelSuffix)"
         }
 
     }
-
+#>
     
     #$ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
     #$ACLName = "ACL_$($ParentLeaf)_$($PathLeaf)_$($ACLLevelSuffix)"
 
-    return $ACLName.Replace(' ','_') | Remove-InvalidFileNameChars
-}
+#    return $ACLName#.Replace(' ','_') | Remove-InvalidFileNameChars
+
 
 
 function New-ACL{
