@@ -1,5 +1,3 @@
-
-
 Function Get-PathDepth {
     Param(
     [ValidateScript({
@@ -164,34 +162,6 @@ function New-ACLName{
     return $ACLName -replace "(?m)_(?=_|$)"
 }
     
-    #return $ACLName
-
-    
-
-    #$PathLeaf = Split-Path $FullFolderPath -Leaf
-
-    #Switch ($PathDepth)
-    <#{
-        0 {$ACLName = "ACL_ROOT_$($RootName)_$($ACLLevelSuffix)"}
-        {($_ -ge 1) -and ($LongPath -eq $true) } {
-            $ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
-            $ACLName = "ACL_LONGPATH_$($ParentLeaf)_$($PathLeaf)_$($ACLLevelSuffix)"
-        }
-        {($_ -ge 1) -and ($LongPath -eq $false) } {
-            $ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
-            $ACLName = "ACL__$($ACLLevelSuffix)"
-        }
-
-    }
-#>
-    
-    #$ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
-    #$ACLName = "ACL_$($ParentLeaf)_$($PathLeaf)_$($ACLLevelSuffix)"
-
-#    return $ACLName#.Replace(' ','_') | Remove-InvalidFileNameChars
-
-
-
 function New-ACL{
     
     Param(
@@ -239,9 +209,9 @@ function New-ACLSetFromFolderPath{
 
         return $true
         })]
-    [String]
-    $FullFolderPath
-    ,
+        [String]
+        $FullFolderPath
+        ,
     
     [String]
     $TargetOUDistinguishedName
@@ -273,8 +243,8 @@ function Set-ACLsOnFolder{
 
         return $true
         })]
-    [String]
-    $FullFolderPath
+        [String]
+        $FullFolderPath
     )
 
     $ACLTypeSet = ("Traverse","ReadOnly","ReadWrite","FullControl")
@@ -301,4 +271,152 @@ function Set-ACLsOnFolder{
         $CurrentFolderACL | Set-ACL -Path $FullFolderPath
         Write-Verbose "Permissions Granted Successfully"
     }
+}
+
+Function Test-OUExists {
+    param(    
+        [Parameter(Mandatory=$true,
+        Position=0,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]    
+        $OUDistinguishedName    
+        )
+
+    return [adsi]::Exists("LDAP://$($OUDistinguishedName)")} 
+
+
+Function Add-GroupAccessToFolder{
+    
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true,
+        Position=0,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $StaffGroupName
+        ,
+
+        [ValidateScript({
+            if(-Not ($_ | Test-OUExists))
+            {
+                throw "OU does not exist - $($_)"
+            }
+        })]
+        [Parameter(Mandatory=$true,
+        Position=1,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $StaffGroup_OU_DistinguishedName
+        ,
+
+        [ValidateScript({
+            if(-Not ($_ | Test-OUExists))
+            {
+                throw "OU does not exist - $($_)"
+            }
+        })]
+        [Parameter(Mandatory=$true,
+        Position=2,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $ACL_OU_DistinguishedName
+        ,
+
+        [ValidateScript({
+            if( -Not ($_ | Test-Path )){
+                throw "Folder does not exist"
+            }
+            if($_ | Test-Path -PathType Leaf){
+                throw "The Path argument must be a folder. File paths are not allowed."
+            }
+    
+            return $true
+            })]
+        [Parameter(Mandatory=$true,
+        Position=4,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $FullFolderPath
+        ,
+
+        [Parameter(Mandatory=$true,
+        Position=5,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [ValidateSet("Traverse","ReadOnly","ReadWrite","FullControl")]
+        [String]
+        $PermissionLevel
+    )
+
+    # Check if folder exists
+    $FolderExists = Test-Path $FullFolderPath -PathType Container
+
+    # Check if Staff Target OU exists
+    $StaffOUExists = Test-OUExists -OUDistinguishedName $StaffGroup_OU_DistinguishedName
+    # Check if Staff Group already exists
+    $StaffADGroup = Get-ADGroup -SearchBase $StaffGroup_OU_DistinguishedName -Filter {(Name -eq $StaffGroup_OU_DistinguishedName) -and (GroupCategory -eq "Security")}
+            #   If group doesn't exist, create it
+
+    # Check if ACL Target OU exists
+    $ACLOUExists = Test-OUExists -OUDistinguishedName $ACL_OU_DistinguishedName
+
+    # Check if ACL set exists 
+    $ACLTypeSet = ("Traverse","ReadOnly","ReadWrite","FullControl")
+    foreach ($ACLType in $ACLTypeSet)
+    {
+        Write-Verbose "Getting $ACLType Group"
+        $ACLName = New-ACLName -FullFolderPath $FullFolderPath -ACLLevel $ACLType
+        $ACLGroup = Get-ADGroup -SearchBase $ACL_OU_DistinguishedName -Filter {(Name -eq $ACLName) -and (GroupCategory -eq "Security")}
+        If (-Not ($ACLGroup)){
+            New-ACL -ACLName $ACLName -FullFolderPath $FullFolderPath -ACLRights $ACLType -TargetOUDistinguishedName $ACL_OU_DistinguishedName
+        }
+    }
+
+    # Check if relevant ACLs already exists on folder 
+            # If false - create a set
+            Set-ACLsOnFolder -FullFolderPath $FullFolderPath
+
+    # Add relevant ACL to the Staff group
+
+    # Check each folder upstream of target folder
+            # Check if ACL set already exists on folder, particularly Traverse.
+                # If false, create a set
+            # Add Traverse ACL to the Staff group
+
+    <#
+    Example output:
+    Staff Target OU Exists - OU=Standard,OU=Staff,OU=Security Groups,OU=Accounts,DC=testdomain,DC=local
+    Staff Target OU contains Staff Group named "HR Staff" / Staff Group created in Target OU
+    ACL Target OU Exists - OU=Standard,OU=Resources,OU=Security Groups,OU=Accounts,DC=testdomain,DC=local
+    ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
+      - ACL_FolderName_T
+      - ACL_FolderName_R
+      - ACL_FolderName_RW
+      - ACL_FolderName_FC
+    Applied ACL's to folder
+      - ACL_FolderName_T - Traverse - The Folder Only
+      - ACL_FolderName_R - Read Only - This Folder, Subfolders and Files
+      - ACL_FolderName_RW - Modify - This Folder, Subfolders and Files
+      - ACL_FolderName_FC - Full Control - This Folder, Subfolders and Files
+    Added Staff Group as a member of Modify ACL
+    Checking upstream folders.
+    Folder A - 
+        ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
+            - ETC
+        Folder has ACL's applied
+            - ETC
+        Added Staff Group as a member of Traverse ACL
+    Folder B - 
+        ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
+            - ETC
+        Folder has ACL's applied
+            - ETC
+        Added Staff Group as a member of Traverse ACL
+    #>
+
 }
