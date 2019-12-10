@@ -1,5 +1,3 @@
-
-
 Function Get-PathDepth {
     Param(
     [ValidateScript({
@@ -164,34 +162,6 @@ function New-ACLName{
     return $ACLName -replace "(?m)_(?=_|$)"
 }
     
-    #return $ACLName
-
-    
-
-    #$PathLeaf = Split-Path $FullFolderPath -Leaf
-
-    #Switch ($PathDepth)
-    <#{
-        0 {$ACLName = "ACL_ROOT_$($RootName)_$($ACLLevelSuffix)"}
-        {($_ -ge 1) -and ($LongPath -eq $true) } {
-            $ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
-            $ACLName = "ACL_LONGPATH_$($ParentLeaf)_$($PathLeaf)_$($ACLLevelSuffix)"
-        }
-        {($_ -ge 1) -and ($LongPath -eq $false) } {
-            $ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
-            $ACLName = "ACL__$($ACLLevelSuffix)"
-        }
-
-    }
-#>
-    
-    #$ParentLeaf = Split-Path (Split-Path $FullFolderPath -Parent) -Leaf
-    #$ACLName = "ACL_$($ParentLeaf)_$($PathLeaf)_$($ACLLevelSuffix)"
-
-#    return $ACLName#.Replace(' ','_') | Remove-InvalidFileNameChars
-
-
-
 function New-ACL{
     
     Param(
@@ -222,8 +192,22 @@ ACL Created from $env:COMPUTERNAME at $(Get-Date -Format "yyyy/MM/dd HH:mm")
 $ACLRights Access - $FullFolderPath
 "@
 
-    New-ADGroup -GroupCategory Security -GroupScope DomainLocal -Name $ACLName -Description $ACLDescription -Path $TargetOUDistinguishedName
-    Set-ADGroup -Identity $ACLName -Replace @{info="$ACLNotes"}
+    # Check if group already exists
+    $ACLGroup = Get-ADGroup -SearchBase $TargetOUDistinguishedName -Filter {(Name -eq $ACLName) -and (GroupCategory -eq "Security")}
+    If ($ACLGroup){
+        Write-Verbose -Message "ACL $($ACLName) already exists - skipped creation."
+    }
+    elseif (-Not ($ACLGroup)) {
+        Write-Verbose "$ACLType Group not found - Creating $ACLName"
+        New-ADGroup -GroupCategory Security -GroupScope DomainLocal -Name $ACLName -Description $ACLDescription -Path $TargetOUDistinguishedName
+        Set-ADGroup -Identity $ACLName -Replace @{info="$ACLNotes"}
+        Write-Verbose "$ACLType group $ACLName Created"
+    }
+    else {
+        throw "Finding or creating the $($ACLName) ACL group failed"
+    }
+
+    return Get-ADGroup -SearchBase $TargetOUDistinguishedName -Filter {(Name -eq $ACLName) -and (GroupCategory -eq "Security")}    
 }
 
 function New-ACLSetFromFolderPath{
@@ -239,9 +223,9 @@ function New-ACLSetFromFolderPath{
 
         return $true
         })]
-    [String]
-    $FullFolderPath
-    ,
+        [String]
+        $FullFolderPath
+        ,
     
     [String]
     $TargetOUDistinguishedName
@@ -254,7 +238,6 @@ function New-ACLSetFromFolderPath{
         $ACLName = New-ACLName -FullFolderPath $FullFolderPath -ACLLevel $ACLType
         Write-Verbose "Creating ACL group named $ACLName at $TargetOUDistinguishedName"
         New-ACL -ACLName $ACLName -FullFolderPath $FullFolderPath -ACLRights $ACLType -TargetOUDistinguishedName $TargetOUDistinguishedName
-        Write-Verbose "ACL group $ACLName created"
     }
 
 }
@@ -273,8 +256,8 @@ function Set-ACLsOnFolder{
 
         return $true
         })]
-    [String]
-    $FullFolderPath
+        [String]
+        $FullFolderPath
     )
 
     $ACLTypeSet = ("Traverse","ReadOnly","ReadWrite","FullControl")
@@ -301,4 +284,196 @@ function Set-ACLsOnFolder{
         $CurrentFolderACL | Set-ACL -Path $FullFolderPath
         Write-Verbose "Permissions Granted Successfully"
     }
+}
+
+Function Test-OUExists {
+    param(    
+        [Parameter(Mandatory=$true,
+        Position=0,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]    
+        $OUDistinguishedName    
+        )
+
+    return [adsi]::Exists("LDAP://$($OUDistinguishedName)")} 
+
+
+Function Add-GroupAccessToFolder{
+    
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$true,
+        Position=0,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $StaffGroupName
+        ,
+
+        [ValidateScript({
+            if(-Not ($_ | Test-OUExists)) {
+                throw "OU does not exist - $($_)"
+            }
+            return $true
+        })]
+        [Parameter(Mandatory=$true,
+        Position=1,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $StaffGroup_OU_DistinguishedName
+        ,
+
+        [ValidateScript({
+            if(-Not ($_ | Test-OUExists)) {
+                throw "OU does not exist - $($_)"
+            }
+
+            return $true
+        })]
+        [Parameter(Mandatory=$true,
+        Position=2,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $ACL_OU_DistinguishedName
+        ,
+
+        [ValidateScript({
+            if( -Not ($_ | Test-Path )){
+                throw "Folder does not exist"
+            }
+            if($_ | Test-Path -PathType Leaf){
+                throw "The Path argument must be a folder. File paths are not allowed."
+            }
+    
+            return $true
+            })]
+        [Parameter(Mandatory=$true,
+        Position=4,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [String]
+        $FullFolderPath
+        ,
+
+        [Parameter(Mandatory=$true,
+        Position=5,
+        ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [ValidateSet("Traverse","ReadOnly","ReadWrite","FullControl")]
+        [String]
+        $PermissionLevel
+        ,
+
+        [Parameter(ValueFromPipeline=$true,
+        ValueFromPipelineByPropertyName=$true)]
+        [Switch]
+        $BreakInheritance
+    )
+
+    # Check if folder exists - Handled with parameter validation
+    
+
+    # Check if Staff Target OU exists - Handled with parameter validation
+        
+    # Check if Staff Group already exists
+    $StaffADGroup = Get-ADGroup -SearchBase $StaffGroup_OU_DistinguishedName -Filter {(Name -eq $StaffGroupName) -and (GroupCategory -eq "Security")}
+    #   If group doesn't exist, create it
+    If (-Not ($StaffADGroup)){
+        Write-Verbose -Message "Staff group $($StaffGroupName) does not exist - Creating Global Security group"
+        New-ADGroup -GroupCategory Security -GroupScope Global -Name $StaffGroupName -Path $StaffGroup_OU_DistinguishedName
+        $StaffADGroup = Get-ADGroup -SearchBase $StaffGroup_OU_DistinguishedName -Filter {(Name -eq $StaffGroupName) -and (GroupCategory -eq "Security")}
+    }
+    if ($StaffADGroup) {
+        Write-Verbose -Message "Staff group $($StaffGroupName) found."
+    }
+    else {
+        throw "Finding or creating the $($StaffGroupName) staff group failed"
+    }
+
+    # Check if ACL Target OU exists - Handled with parameter validation
+    
+    # Create missing ACL Groups on folder
+    Write-Verbose -Message "Creating ACL set from folder path"
+    New-ACLSetFromFolderPath -FullFolderPath $FullFolderPath -TargetOUDistinguishedName $ACL_OU_DistinguishedName
+
+    # Set relevant ACLs on folder 
+            # If false - create a set
+            Write-Verbose -Message "Setting ACL group permissions on folder"
+            Set-ACLsOnFolder -FullFolderPath $FullFolderPath
+
+    # Add relevant ACL to the Staff group
+        $ACLName = New-ACLName -FullFolderPath $FullFolderPath -ACLLevel $PermissionLevel
+        Write-Verbose -Message "Adding the $PermissionLevel ACL $ACLName to $StaffGroupName"
+        $ACLGroup = Get-ADGroup -SearchBase $ACL_OU_DistinguishedName -Filter {(Name -eq $ACLName) -and (GroupCategory -eq "Security")}
+        $ACLGroup | Add-ADGroupMember -Members $StaffGroupName
+
+
+    # Check each folder upstream of target folder
+    Write-Verbose -Message "Adding Traverse permissions for all folders upstream of $FullFolderPath"
+    $PathDepth = Get-PathDepth -Path $FullFolderPath
+
+    $ParentFolder = $FullFolderPath
+    for ($depth=$PathDepth; $depth -gt 1; $depth--){
+        Write-Verbose "Getting Parent of path - $ParentFolder"
+        $ParentFolder = Split-Path -Path $ParentFolder -Parent
+        Write-Verbose "Parent = $ParentFolder"
+
+        Write-Verbose "Creating/Getting ACL groups for $ParentFolder"
+        # Create missing ACL Groups on folder
+        New-ACLSetFromFolderPath -FullFolderPath $ParentFolder -TargetOUDistinguishedName $ACL_OU_DistinguishedName
+
+        Write-Verbose -Message "Applying ACL's to $ParentFolder"
+        # Apply ACL's to folder
+        Set-ACLsOnFolder -FullFolderPath $ParentFolder
+
+        # Apply Traverse ACL to Staff Group
+        
+        $TraverseACLName = New-ACLName -FullFolderPath $ParentFolder -ACLLevel Traverse
+        Write-Verbose -Message "Adding ACL $TraverseACLName to $StaffADGroup"
+        $TraverseACLGroup = Get-ADGroup -SearchBase $ACL_OU_DistinguishedName -Filter {(Name -eq $TraverseACLName) -and (GroupCategory -eq "Security")}
+        $TraverseACLGroup | Add-ADGroupMember -Members $StaffGroupName
+    }
+
+
+    # Break Inheritance on the folder
+    If ($BreakInheritance){
+        $FolderAcl = Get-ACL -Path $FullFolderPath
+        $FolderAcl.SetAccessRuleProtection($true, $false)
+        $FolderAcl | Set-Acl -Path $FullFolderPath
+    }
+
+    <#
+    Example output:
+    Staff Target OU Exists - OU=Standard,OU=Staff,OU=Security Groups,OU=Accounts,DC=testdomain,DC=local
+    Staff Target OU contains Staff Group named "HR Staff" / Staff Group created in Target OU
+    ACL Target OU Exists - OU=Standard,OU=Resources,OU=Security Groups,OU=Accounts,DC=testdomain,DC=local
+    ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
+      - ACL_FolderName_T
+      - ACL_FolderName_R
+      - ACL_FolderName_RW
+      - ACL_FolderName_FC
+    Applied ACL's to folder
+      - ACL_FolderName_T - Traverse - The Folder Only
+      - ACL_FolderName_R - Read Only - This Folder, Subfolders and Files
+      - ACL_FolderName_RW - Modify - This Folder, Subfolders and Files
+      - ACL_FolderName_FC - Full Control - This Folder, Subfolders and Files
+    Added Staff Group as a member of Modify ACL
+    Checking upstream folders.
+    Folder A - 
+        ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
+            - ETC
+        Folder has ACL's applied
+            - ETC
+        Added Staff Group as a member of Traverse ACL
+    Folder B - 
+        ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
+            - ETC
+        Folder has ACL's applied
+            - ETC
+        Added Staff Group as a member of Traverse ACL
+    #>
+
 }
