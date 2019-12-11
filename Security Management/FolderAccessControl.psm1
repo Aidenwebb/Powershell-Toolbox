@@ -474,8 +474,8 @@ Function Add-GroupAccessToFolder{
         $FolderAcl | Set-Acl -Path $FullFolderPath
     }
 
-    Write-Console -Message "Add-GroupAccessToFolder complete"
+    Write-Output -Message "Add-GroupAccessToFolder complete"
     Write-Verbose -Message "Staff group located in OU: $StaffGroup_OU_DistinguishedName"
     Write-Verbose -Message "ACL groups located in OU: $ACL_OU_DistinguishedName"
-    Write-Console -Message "Please add staff to the $StaffGroupName group as required to grant $PermissionLevel access to $FullFolderPath"
+    Write-Output -Message "Please add staff to the $StaffGroupName group as required to grant $PermissionLevel access to $FullFolderPath"
 }
