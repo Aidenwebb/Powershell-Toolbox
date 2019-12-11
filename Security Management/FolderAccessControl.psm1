@@ -305,7 +305,7 @@ Function Add-GroupAccessToFolder{
     .SYNOPSIS
         Grant an AD security group access to a folder using Role Based Access Control principals
     .DESCRIPTION
-        This script takes a folder path and:
+        This function takes a folder path and:
           - Creates a set of ACL AD security groups for it and all upstream folders (if they do not already exist)
           - Creates a role/staff AD group to which users can be assigned (if they do not already exist)
           - Adds the staff group as a member of the appropriate target folder ACL group
@@ -469,6 +469,7 @@ Function Add-GroupAccessToFolder{
 
     # Break Inheritance on the folder
     If ($BreakInheritance){
+        Write-Verbose -Message "Disabling inheritance and removing inherited permissions from $FullFolderPath"
         $FolderAcl = Get-ACL -Path $FullFolderPath
         $FolderAcl.SetAccessRuleProtection($true, $false)
         $FolderAcl | Set-Acl -Path $FullFolderPath
