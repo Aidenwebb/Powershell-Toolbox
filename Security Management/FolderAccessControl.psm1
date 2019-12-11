@@ -301,6 +301,31 @@ Function Test-OUExists {
 
 Function Add-GroupAccessToFolder{
     
+    <#
+    .SYNOPSIS
+        Grant an AD security group access to a folder using Role Based Access Control principals
+    .DESCRIPTION
+        This script takes a folder path and:
+          - Creates a set of ACL AD security groups for it and all upstream folders (if they do not already exist)
+          - Creates a role/staff AD group to which users can be assigned (if they do not already exist)
+          - Adds the staff group as a member of the appropriate target folder ACL group
+          - Adds the staff group as a member of each upstream folders Traverse ACL group
+    .NOTES
+        Author : Aiden Arnkels-Webb - aiden.webb@gmail.com
+        Requires: Powershell 5.1
+    .EXAMPLE
+        Add-GroupAccessToFolder `
+          -StaffGroupName "Finance Auditors" `
+          -StaffGroup_OU_DistinguishedName "OU=Standard,OU=Staff Roles,OU=Security Groups,OU=Accounts,DC=testdomain,DC=local" `
+          -ACL_OU_DistinguishedName "OU=Standard,OU=ACLs,OU=Security Groups,OU=Accounts,DC=testdomain,DC=local" `
+          -FullFolderPath "testdomain.local\dfs\Data\Finance" `
+          -PermissionLevel ReadOnly `
+          -BreakInheritance `
+          -Verbose 
+
+
+    #>
+
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$true,
@@ -373,6 +398,14 @@ Function Add-GroupAccessToFolder{
         $BreakInheritance
     )
 
+
+    # Check if script has been run as Admin
+    $AdminSession =  (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) 
+    
+    if (-Not ($AdminSession)){
+        throw "This function may fail to complete leading to an inconsistent state if not run as an administrator. Please try again from an Admin Powershell session"
+    }
+
     # Check if folder exists - Handled with parameter validation
     
 
@@ -441,35 +474,8 @@ Function Add-GroupAccessToFolder{
         $FolderAcl | Set-Acl -Path $FullFolderPath
     }
 
-    <#
-    Example output:
-    Staff Target OU Exists - OU=Standard,OU=Staff,OU=Security Groups,OU=Accounts,DC=testdomain,DC=local
-    Staff Target OU contains Staff Group named "HR Staff" / Staff Group created in Target OU
-    ACL Target OU Exists - OU=Standard,OU=Resources,OU=Security Groups,OU=Accounts,DC=testdomain,DC=local
-    ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
-      - ACL_FolderName_T
-      - ACL_FolderName_R
-      - ACL_FolderName_RW
-      - ACL_FolderName_FC
-    Applied ACL's to folder
-      - ACL_FolderName_T - Traverse - The Folder Only
-      - ACL_FolderName_R - Read Only - This Folder, Subfolders and Files
-      - ACL_FolderName_RW - Modify - This Folder, Subfolders and Files
-      - ACL_FolderName_FC - Full Control - This Folder, Subfolders and Files
-    Added Staff Group as a member of Modify ACL
-    Checking upstream folders.
-    Folder A - 
-        ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
-            - ETC
-        Folder has ACL's applied
-            - ETC
-        Added Staff Group as a member of Traverse ACL
-    Folder B - 
-        ACL Target OU contains ACLs for folder: / ACL's created for folder in Target OU
-            - ETC
-        Folder has ACL's applied
-            - ETC
-        Added Staff Group as a member of Traverse ACL
-    #>
-
+    Write-Console -Message "Add-GroupAccessToFolder complete"
+    Write-Verbose -Message "Staff group located in OU: $StaffGroup_OU_DistinguishedName"
+    Write-Verbose -Message "ACL groups located in OU: $ACL_OU_DistinguishedName"
+    Write-Console -Message "Please add staff to the $StaffGroupName group as required to grant $PermissionLevel access to $FullFolderPath"
 }
