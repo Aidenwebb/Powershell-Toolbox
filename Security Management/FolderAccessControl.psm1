@@ -259,7 +259,7 @@ function Set-ACLsOnFolder{
         [String]
         $FullFolderPath
     )
-
+    Write-Verbose -Message "Setting ACL group permissions on folder - $FullFolderPath"
     $ACLTypeSet = ("Traverse","ReadOnly","ReadWrite","FullControl")
 
     foreach ($ACLType in $ACLTypeSet)
@@ -278,11 +278,11 @@ function Set-ACLsOnFolder{
             "ReadWrite" { $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($ACLGroupFormatted,"Modify","ObjectInherit,ContainerInherit","None","Allow")} # Permissions granted to this Folder, Subfolders and files
             "FullControl" { $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($ACLGroupFormatted,"FullControl","ObjectInherit,ContainerInherit","None","Allow")} # Permissions granted to this Folder, Subfolders and files
         }
-        Write-Verbose "Granting $ACLGroupFormatted with $ACLType Rights to $FullFolderPath"
+        Write-Verbose "Setting $ACLType rights to $FullFolderPath for $ACLGroupFormatted"
         $CurrentFolderACL = Get-Acl -Path $FullFolderPath
         $CurrentFolderACL.SetAccessRule($AccessRule)
         $CurrentFolderACL | Set-ACL -Path $FullFolderPath
-        Write-Verbose "Permissions Granted Successfully"
+        Write-Verbose "Permissions Set Successfully"
     }
 }
 
@@ -396,17 +396,15 @@ Function Add-GroupAccessToFolder{
     # Check if ACL Target OU exists - Handled with parameter validation
     
     # Create missing ACL Groups on folder
-    Write-Verbose -Message "Creating ACL set from folder path"
     New-ACLSetFromFolderPath -FullFolderPath $FullFolderPath -TargetOUDistinguishedName $ACL_OU_DistinguishedName
 
     # Set relevant ACLs on folder 
             # If false - create a set
-            Write-Verbose -Message "Setting ACL group permissions on folder"
             Set-ACLsOnFolder -FullFolderPath $FullFolderPath
 
     # Add relevant ACL to the Staff group
         $ACLName = New-ACLName -FullFolderPath $FullFolderPath -ACLLevel $PermissionLevel
-        Write-Verbose -Message "Adding the $PermissionLevel ACL $ACLName to $StaffGroupName"
+        Write-Verbose -Message "Added Staff Group $StaffGroupName as a member of $PermissionLevel ACL $TraverseACLName"
         $ACLGroup = Get-ADGroup -SearchBase $ACL_OU_DistinguishedName -Filter {(Name -eq $ACLName) -and (GroupCategory -eq "Security")}
         $ACLGroup | Add-ADGroupMember -Members $StaffGroupName
 
@@ -421,18 +419,16 @@ Function Add-GroupAccessToFolder{
         $ParentFolder = Split-Path -Path $ParentFolder -Parent
         Write-Verbose "Parent = $ParentFolder"
 
-        Write-Verbose "Creating/Getting ACL groups for $ParentFolder"
         # Create missing ACL Groups on folder
         New-ACLSetFromFolderPath -FullFolderPath $ParentFolder -TargetOUDistinguishedName $ACL_OU_DistinguishedName
 
-        Write-Verbose -Message "Applying ACL's to $ParentFolder"
         # Apply ACL's to folder
         Set-ACLsOnFolder -FullFolderPath $ParentFolder
 
         # Apply Traverse ACL to Staff Group
         
         $TraverseACLName = New-ACLName -FullFolderPath $ParentFolder -ACLLevel Traverse
-        Write-Verbose -Message "Adding ACL $TraverseACLName to $StaffADGroup"
+        Write-Verbose -Message "Added Staff Group $StaffGroupName as a member of Traverse ACL $TraverseACLName"
         $TraverseACLGroup = Get-ADGroup -SearchBase $ACL_OU_DistinguishedName -Filter {(Name -eq $TraverseACLName) -and (GroupCategory -eq "Security")}
         $TraverseACLGroup | Add-ADGroupMember -Members $StaffGroupName
     }
