@@ -137,10 +137,9 @@ function New-ACLName{
         # Use root + .. + last 2 folders of path, replacing spaces with Blank, replacing \ with underscores, removing :, removing duplicate _'s, remove invalid characters
         if ($LongPath) {
             $CleanedPathSplit = $CleanedPath.Split("_")
-            $ACLMiddle = "LONGPATH_$($RootName)_.._$($CleanedPathSplit[-1])_$($CleanedPathSplit[-2])"
-            if ($ACLMiddle -gt 42){
+            $ACLMiddle = "LONGPATH_$($RootName)_DEPTH-$($PathDepth)_$($CleanedPathSplit[-1])"
+            if ($ACLMiddle.Length -gt 42){
                 $ACLMiddle = "$($ACLMiddle.Substring(0, 42)).."
-
             }
 
 
@@ -306,10 +305,17 @@ Function Add-GroupAccessToFolder{
         Grant an AD security group access to a folder using Role Based Access Control principals
     .DESCRIPTION
         This function takes a folder path and:
-          - Creates a set of ACL AD security groups for it and all upstream folders (if they do not already exist)
-          - Creates a role/staff AD group to which users can be assigned (if they do not already exist)
+          - Creates a role/staff AD group to which users can be assigned (if one does not already exist)  
+          - Creates a set of ACL AD security groups for the target folder and all upstream folders (if they do not already exist)
+            - Traverse
+            - ReadOnly
+            - Read/Write
+            - Full Control
           - Adds the staff group as a member of the appropriate target folder ACL group
           - Adds the staff group as a member of each upstream folders Traverse ACL group
+          - If BreakInheritance parameter is set:
+            - Creates an explicit folder permission on the folder granting System Full Control for the folder, subfolders and files
+            - Breaks inheritance and clears inherited permissions if required.
     .NOTES
         Author : Aiden Arnkels-Webb - aiden.webb@gmail.com
         Requires: Powershell 5.1
@@ -412,15 +418,21 @@ Function Add-GroupAccessToFolder{
     # Check if Staff Target OU exists - Handled with parameter validation
         
     # Check if Staff Group already exists
-    $StaffADGroup = Get-ADGroup -SearchBase $StaffGroup_OU_DistinguishedName -Filter {(Name -eq $StaffGroupName) -and (GroupCategory -eq "Security")}
+    $StaffADGroup = Get-ADGroup -SearchBase $StaffGroup_OU_DistinguishedName -Filter {(Name -eq $StaffGroupName) -and (GroupCategory -eq "Security")} -Properties *
     #   If group doesn't exist, create it
     If (-Not ($StaffADGroup)){
         Write-Verbose -Message "Staff group $($StaffGroupName) does not exist - Creating Global Security group"
         New-ADGroup -GroupCategory Security -GroupScope Global -Name $StaffGroupName -Path $StaffGroup_OU_DistinguishedName
-        $StaffADGroup = Get-ADGroup -SearchBase $StaffGroup_OU_DistinguishedName -Filter {(Name -eq $StaffGroupName) -and (GroupCategory -eq "Security")}
+        $StaffADGroup = Get-ADGroup -SearchBase $StaffGroup_OU_DistinguishedName -Filter {(Name -eq $StaffGroupName) -and (GroupCategory -eq "Security")} -Properties *
+        
     }
     if ($StaffADGroup) {
         Write-Verbose -Message "Staff group $($StaffGroupName) found."
+        Write-Verbose -Message "Adding permission note to $StaffADGroupName."
+
+        $StaffGroupNotes = "$($StaffADGroup.info) `r`n $PermissionLevel access to $FullFolderPath"
+        $StaffADGroup | Set-ADGroup -Replace @{info="$StaffGroupNotes"}
+
     }
     else {
         throw "Finding or creating the $($StaffGroupName) staff group failed"
@@ -469,6 +481,14 @@ Function Add-GroupAccessToFolder{
 
     # Break Inheritance on the folder
     If ($BreakInheritance){
+        Write-Verbose -Message "BreakInheritance flag is set. Ensuring System has explicit access to the folder before breaking inheritance"
+        
+        $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("NT AUTHORITY\SYSTEM","FullControl","ObjectInherit,ContainerInherit","None","Allow") 
+
+        $FolderAcl = Get-ACL -Path $FullFolderPath
+        $Folderacl.SetAccessRule($AccessRule)
+        $FolderAcl | Set-Acl -Path $FullFolderPath
+
         Write-Verbose -Message "Disabling inheritance and removing inherited permissions from $FullFolderPath"
         $FolderAcl = Get-ACL -Path $FullFolderPath
         $FolderAcl.SetAccessRuleProtection($true, $false)
