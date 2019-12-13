@@ -428,7 +428,7 @@ Function Add-GroupAccessToFolder{
     }
     if ($StaffADGroup) {
         Write-Verbose -Message "Staff group $($StaffGroupName) found."
-        Write-Verbose -Message "Adding permission note to $StaffADGroupName."
+        Write-Verbose -Message "Adding permission note to $StaffGroupName."
 
         $StaffGroupNotes = "$($StaffADGroup.info) `r`n $PermissionLevel access to $FullFolderPath"
         $StaffADGroup | Set-ADGroup -Replace @{info="$StaffGroupNotes"}
