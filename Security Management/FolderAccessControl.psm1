@@ -1,3 +1,67 @@
+Function Match-ACL {
+	<#
+		.SYNOPSIS
+			Compare two ACL's ACE(s). Will return True if the Access Rules match and will return false if the Access rules do not match.
+			Note: Ignores Inherited permissions.
+		.DESCRIPTION
+			Checks if two ACLs are matching by finding identical ACE(s) in the Current and Desired non-inherited ACL(s).
+			Returns False if all Desired ACE(s) match Current ACE(s) but there is not the same amount of ACE(s) in each.		
+		.EXAMPLE
+			Acl-Match -CurrentACL (Get-ACL C:\temp) -DesiredACL (Get-ACL C:\test)
+		.EXAMPLE
+			It is also possible to create a System Security object in powershell to compare to:
+			$DesiredACL = New-Object System.Security.AccessControl.DirectorySecurity
+			#Create the ACE
+			$ace = New-Object System.Security.AccessControl.FileSystemAccessRule(
+				'Contoso\Domain Users', 
+				'Modify', 
+				'ContainerInherit, ObjectInherit', #ThisFolderSubfoldersAndFiles
+				'None', 
+				'Allow'
+			)
+			#Add the ACE to the ACL
+			$DesiredACL.AddAccessRule($ace)
+			$ace = New-Object System.Security.AccessControl.FileSystemAccessRule(
+				"Contoso\User1", 
+				'FullControl',
+				'ContainerInherit, ObjectInherit', #ThisFolderSubfoldersAndFiles
+				'None', 
+				'Allow'
+			)
+			$DesiredACL.AddAccessRule($ace)
+			Acl-Match -CurrentACL (Get-ACL C:\temp) -DesiredACL $DesiredACL
+		.NOTES
+			ToDo:
+				Output object similar to Compare-Object
+	#>
+	param(
+		[System.Security.AccessControl.FileSystemSecurity]$DesiredACL,
+		[System.Security.AccessControl.FileSystemSecurity]$CurrentACL
+	)
+	$DesiredRules = $DesiredACL.GetAccessRules($true, $false, [System.Security.Principal.NTAccount])
+	$CurrentRules = $CurrentACL.GetAccessRules($true, $false, [System.Security.Principal.NTAccount])
+	$Matches = @()
+	Foreach($DesiredRule in $DesiredRules){
+		$Match = $CurrentRules | Where-object { 
+			($DesiredRule.FileSystemRights -eq $_.FileSystemRights) -and 
+	        ($DesiredRule.AccessControlType -eq $_.AccessControlType) -and 
+			($DesiredRule.IdentityReference -eq $_.IdentityReference) -and 
+	        ($DesiredRule.InheritanceFlags -eq $_.InheritanceFlags ) -and 
+			($DesiredRule.PropagationFlags -eq $_.PropagationFlags ) 
+		}
+		If($Match){
+			$Matches += $Match
+		}
+		Else{
+			Return $False
+		}
+	}
+	If($Matches.Count -ne $CurrentRules.Count){
+		Return $False 
+	}
+	Return $True
+}
+
 Function Get-PathDepth {
     Param(
     [ValidateScript({
@@ -261,6 +325,9 @@ function Set-ACLsOnFolder{
     Write-Verbose -Message "Setting ACL group permissions on folder - $FullFolderPath"
     $ACLTypeSet = ("Traverse","ReadOnly","ReadWrite","FullControl")
 
+    $OriginalACL = Get-Acl -Path $FullFolderPath
+    $DesiredACL = Get-Acl -Path $FullFolderPath
+
     foreach ($ACLType in $ACLTypeSet)
     {
         Write-Verbose "Getting $ACLType Group"
@@ -268,21 +335,44 @@ function Set-ACLsOnFolder{
         $ACLGroup = Get-ADGroup -Identity $ACLName
         $ACLGroupFormatted = "$((($ACLGroup.DistinguishedName -split 'DC=')[1]).Replace(',',''))\$($ACLGroup.SamAccountName)"
         Write-Verbose "$ACLGroupFormatted found"
-        
 
         Switch ($ACLType)
         {
-            "Traverse" { $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($ACLGroupFormatted,"ReadAndExecute","None","None","Allow")} # Permissions granted to only this Folder. Traverse should not be inherited.
+            "Traverse" { $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($ACLGroupFormatted,"Traverse","None","None","Allow")} # Permissions granted to only this Folder. Traverse should not be inherited.
             "ReadOnly" { $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($ACLGroupFormatted,"ReadAndExecute","ObjectInherit,ContainerInherit","None","Allow")} # Permissions granted to this Folder, Subfolders and files
             "ReadWrite" { $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($ACLGroupFormatted,"Modify","ObjectInherit,ContainerInherit","None","Allow")} # Permissions granted to this Folder, Subfolders and files
             "FullControl" { $AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($ACLGroupFormatted,"FullControl","ObjectInherit,ContainerInherit","None","Allow")} # Permissions granted to this Folder, Subfolders and files
         }
-        Write-Verbose "Setting $ACLType rights to $FullFolderPath for $ACLGroupFormatted"
-        $CurrentFolderACL = Get-Acl -Path $FullFolderPath
-        $CurrentFolderACL.SetAccessRule($AccessRule)
-        $CurrentFolderACL | Set-ACL -Path $FullFolderPath
+        Write-Verbose "Preparing $ACLType rights to $FullFolderPath for $ACLGroupFormatted"
+        
+        $DesiredACL.SetAccessRule($AccessRule)
+        
+    }
+
+
+    If (-Not(Match-ACL -CurrentACL $OriginalACL -DesiredACL $DesiredACL)){
+
+        $acllist = @()
+
+        ForEach ($Access in $DesiredACL.Access) {
+    
+            $Properties = [ordered]@{'Group/User'=$Access.IdentityReference;'Permissions'=$Access.FileSystemRights;'Inherited'=$Access.IsInherited}
+     
+            $acllist += (New-Object -TypeName PSObject -Property $Properties)
+     
+       }
+        Write-Output "Writing permissions to folders"
+        Write-Output $acllist
+
+        $DesiredACL | Set-ACL -Path $FullFolderPath
         Write-Verbose "Permissions Set Successfully"
     }
+    elseif (Match-ACL -CurrentACL $OriginalACL -DesiredACL $DesiredACL) {
+        Write-Output "Current ACL's already match the Desired ACL's"
+        
+    }
+
+    
 }
 
 Function Test-OUExists {
@@ -431,7 +521,13 @@ Function Add-GroupAccessToFolder{
         Write-Verbose -Message "Adding permission note to $StaffGroupName."
 
         $StaffGroupNotes = "$($StaffADGroup.info) `r`n $PermissionLevel access to $FullFolderPath"
-        $StaffADGroup | Set-ADGroup -Replace @{info="$StaffGroupNotes"}
+        If ($StaffGroupNotes.Length -gt 1024 ){
+            Write-Error -Message "Notes unable to be added to group - max length reached"
+        }
+        else {
+            $StaffADGroup | Set-ADGroup -Replace @{info="$StaffGroupNotes"}
+        }
+        
 
     }
     else {
