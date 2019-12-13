@@ -201,7 +201,7 @@ function New-ACLName{
         # Use root + .. + last 2 folders of path, replacing spaces with Blank, replacing \ with underscores, removing :, removing duplicate _'s, remove invalid characters
         if ($LongPath) {
             $CleanedPathSplit = $CleanedPath.Split("_")
-            $ACLMiddle = "LONGPATH_$($RootName)_DEPTH-$($PathDepth)_$($CleanedPathSplit[-1])"
+            $ACLMiddle = "$($RootName)_LONGDEPTH-$($PathDepth)_$($CleanedPathSplit[-1])"
             if ($ACLMiddle.Length -gt 42){
                 $ACLMiddle = "$($ACLMiddle.Substring(0, 42)).."
             }
