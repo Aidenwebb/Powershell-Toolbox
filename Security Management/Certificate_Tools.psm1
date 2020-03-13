@@ -45,6 +45,52 @@ Else{
     }
 }
 
+function New-CertificateConfig{
+
+param
+(
+    [parameter(mandatory=$true)]
+    [string]$CountryName,
+    [parameter(mandatory=$true)]
+    $StateOrProvinceName,
+    [parameter(mandatory=$true)]
+    $LocalityName,
+    [parameter(mandatory=$true)]
+    [string]$OrganisationName,
+    [parameter(mandatory=$true)]
+    [string]$CommonName,
+    [parameter(mandatory=$true)]
+    [array]$SubjectAlternativeNames
+)
+
+$certconfig = @"
+prompt = no
+[ req ]
+default_bits       = 2048
+distinguished_name = req_distinguished_name
+req_extensions     = req_ext
+[ req_distinguished_name ]
+countryName                 = $CountryName
+stateOrProvinceName         = $StateOrProvinceName
+localityName               = $LocalityName
+organizationName           = $OrganisationName
+commonName                 = $CommonName
+[ req_ext ]
+subjectAltName = @alt_names
+[alt_names]
+"@
+
+
+for ($i=0; $i -lt $SubjectAlternativeNames.length; $i++) {
+	#Write-Host $SubjectAlternativeNames[$i]
+    
+    $certconfig += "`n" # New Line
+    $certconfig += "DNS.$($i+1) = $($SubjectAlternativeNames[$i])"
+}
+
+$certconfig
+}
+
 function New-CSR
 {
 
