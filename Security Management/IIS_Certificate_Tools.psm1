@@ -15,7 +15,7 @@ function Get-BestCertificate
         [parameter(mandatory=$true)]
         [string]$DnsName,
         [parameter(mandatory=$true)]
-        [string]$PfxPassword
+        [securestring]$PfxPassword
     )
 
     BEGIN {}
@@ -49,7 +49,7 @@ param
     [Alias('FullName')]
     [string[]]$File,
     [parameter(mandatory=$true)]
-    [string]$Password
+    [securestring]$Password
 
 
 )
@@ -98,7 +98,7 @@ function Get-ValidCertificates{
         [parameter(mandatory=$true)]
         [string]$DnsName,
         [parameter(mandatory=$true)]
-        [string]$PfxPassword
+        [securestring]$PfxPassword
     )
 
     BEGIN {}
@@ -135,12 +135,11 @@ function Import-BestCertificate
         [parameter(mandatory=$true)]
         [string]$DnsName,
         [parameter(mandatory=$true)]
-        [string]$PfxPassword
+        [securestring]$PfxPassword
     )
 
     $bestcert = Get-BestCertificate -DnsName $DnsName -PfxPassword $PfxPassword -Directory $Directory
-    $securecertpassword = ConvertTo-SecureString -String $PfxPassword -AsPlainText -Force
-    Import-PfxCertificate -FilePath $bestcert.FilePath -Password $securecertpassword -CertStoreLocation Cert:\LocalMachine\WebHosting
+    Import-PfxCertificate -FilePath $bestcert.FilePath -Password $PfxPassword -CertStoreLocation Cert:\LocalMachine\WebHosting
 
 }
 
