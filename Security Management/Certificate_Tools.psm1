@@ -60,7 +60,9 @@ param
     [parameter(mandatory=$true)]
     [string]$CommonName,
     [parameter(mandatory=$true)]
-    [array]$SubjectAlternativeNames
+    [array]$SubjectAlternativeNames,
+    [parameter(mandatory=$true)]
+    [string]$OutputFilePath
 )
 
 $certconfig = @"
@@ -88,7 +90,11 @@ for ($i=0; $i -lt $SubjectAlternativeNames.length; $i++) {
     $certconfig += "DNS.$($i+1) = $($SubjectAlternativeNames[$i])"
 }
 
-$certconfig
+#$certconfig | Out-File $OutputFilePath -Encoding utf8NoBOM
+
+$Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
+[System.IO.File]::WriteAllLines($OutputFilePath, $certconfig, $Utf8NoBomEncoding)
+
 }
 
 function New-CSR
@@ -175,4 +181,35 @@ Else{
     }
 
 
+}
+
+function New-CsrRsaCnfPackage{
+
+param
+(
+    [parameter(mandatory=$true)]
+    [string]$CountryName,
+    [parameter(mandatory=$true)]
+    $StateOrProvinceName,
+    [parameter(mandatory=$true)]
+    $LocalityName,
+    [parameter(mandatory=$true)]
+    [string]$OrganisationName,
+    [parameter(mandatory=$true)]
+    [string]$CommonName,
+    [parameter(mandatory=$true)]
+    [array]$SubjectAlternativeNames,
+    [parameter(mandatory=$true)]
+    [array]$OutputDirectory
+)
+
+    New-PrivateKey -OutputFilePath "$OutputDirectory\$CommonName.key"
+    New-CertificateConfig -CountryName $CountryName `
+        -StateOrProvinceName $StateOrProvinceName `
+        -LocalityName $LocalityName `
+        -OrganisationName $OrganisationName `
+        -CommonName $CommonName `
+        -SubjectAlternativeNames $SubjectAlternativeNames `
+        -OutputFilePath "$OutputDirectory\$CommonName.cnf"
+    New-CSR -RSAKeyPath "$OutputDirectory\$CommonName.key" -ConfigPath "$OutputDirectory\$CommonName.cnf" -OutputFilePath "$OutputDirectory\$CommonName.csr"        
 }
